@@ -1,0 +1,12 @@
+# Arquivos de mídia e transcrições (nunca versionar)
+input/*
+!input/.gitkeep
+output/
+
+# Modelos baixados localmente
+.models/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
