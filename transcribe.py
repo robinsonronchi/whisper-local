@@ -1,10 +1,11 @@
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
 from faster_whisper import BatchedInferencePipeline, WhisperModel
+
+from meeting import load_meeting
 
 
 def format_srt_timestamp(seconds: float) -> str:
@@ -24,7 +25,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "input",
-        help="Caminho do arquivo MP4, MP3, WAV ou outro formato compatível.",
+        help="Pasta da reunião (input/<nome>/) ou arquivo MP4, MP3, WAV etc.",
     )
 
     parser.add_argument(
@@ -35,14 +36,14 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--model",
-        default="small.en",
-        help="Modelo Whisper. Exemplos: base.en, small.en ou medium.en.",
+        default=None,
+        help="Modelo Whisper. Padrão: small.en para inglês, small para outros idiomas.",
     )
 
     parser.add_argument(
         "--language",
-        default="en",
-        help="Idioma falado no arquivo. Para inglês, use en.",
+        default=None,
+        help="Idioma falado no arquivo. Padrão: en.",
     )
 
     parser.add_argument(
@@ -78,15 +79,17 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     args = parse_arguments()
 
-    input_path = Path(args.input).expanduser().resolve()
+    meeting = load_meeting(Path(args.input))
+    input_path = meeting.media
+    base_name = meeting.name
 
-    if not input_path.exists():
-        print(f"Arquivo não encontrado: {input_path}", file=sys.stderr)
-        sys.exit(1)
+    args.language = meeting.option(args.language, "language", "en")
+    args.model = meeting.option(
+        args.model, "model", "small.en" if args.language == "en" else "small"
+    )
+    args.prompt = meeting.option(args.prompt, "prompt")
 
-    base_name = input_path.stem
-
-    output_dir = Path(args.output_dir).expanduser().resolve() / base_name
+    output_dir = meeting.output_dir(Path(args.output_dir))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     txt_path = output_dir / f"{base_name}.txt"

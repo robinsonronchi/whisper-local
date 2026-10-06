@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import sherpa_onnx
 
+from meeting import load_meeting
+
 
 def timestamp(seconds: float, separator: str = ",") -> str:
     milliseconds = round(seconds * 1000)
@@ -46,14 +48,29 @@ def merge(items: list[dict]) -> list[dict]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("input", type=Path)
-    parser.add_argument("transcript", type=Path)
-    parser.add_argument("--speakers", type=int, default=4)
+    parser = argparse.ArgumentParser(
+        description="Refina a diarizacao de uma transcricao gerada por transcribe_diarized.py."
+    )
+    parser.add_argument("input", type=Path, help="Pasta da reuniao (input/<nome>/) ou arquivo de midia.")
+    parser.add_argument(
+        "--transcript", type=Path, default=None,
+        help="JSON diarizado. Padrao: <output-dir>/<nome>/<nome>.diarized.json.",
+    )
+    parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument(
+        "--speakers", type=int, default=None,
+        help="Numero de participantes. Padrao: meeting.toml ou estimativa automatica.",
+    )
     args = parser.parse_args()
 
-    source = args.input.resolve()
-    transcript_path = args.transcript.resolve()
+    meeting = load_meeting(args.input)
+    source = meeting.media
+    transcript_path = (
+        args.transcript or meeting.output_dir(args.output_dir) / f"{meeting.name}.diarized.json"
+    ).expanduser().resolve()
+    if not transcript_path.is_file():
+        raise SystemExit(f"Transcricao nao encontrada: {transcript_path}")
+    speakers = meeting.option(args.speakers, "speakers")
     data = json.loads(transcript_path.read_text(encoding="utf-8"))
     utterances = data["utterances"]
     root = Path(__file__).resolve().parent
@@ -66,7 +83,7 @@ def main() -> None:
             num_threads=4,
         ),
         embedding=sherpa_onnx.SpeakerEmbeddingExtractorConfig(str(embedding), num_threads=4),
-        clustering=sherpa_onnx.FastClusteringConfig(num_clusters=args.speakers),
+        clustering=sherpa_onnx.FastClusteringConfig(num_clusters=speakers or -1, threshold=0.5),
         min_duration_on=0.3,
         min_duration_off=0.35,
     )

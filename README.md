@@ -21,6 +21,7 @@ Os interlocutores são agrupamentos acústicos (`SPEAKER_01`, `SPEAKER_02`, …)
 | `transcribe.py` | Transcrição simples e rápida, sem separar interlocutores. Configurável (modelo, idioma, prompt). |
 | `transcribe_diarized.py` | Transcrição de alta fidelidade (`large-v3-turbo`) com timestamps por palavra e uma primeira diarização via Resemblyzer + clustering. |
 | `refine_diarization.py` | Refina a diarização de uma transcrição já gerada usando pyannote-segmentation-3.0 + NeMo TitaNet (sherpa-onnx). Mais preciso; recomendado após o passo anterior. |
+| `meeting.py` | Módulo compartilhado: localiza a mídia na pasta da reunião e lê o `meeting.toml`. |
 
 ## Requisitos
 
@@ -50,35 +51,61 @@ cd ../..
 
 ## Uso
 
-Coloque os arquivos em `input/`. Cada transcrição é gravada em `output/<nome do arquivo sem extensão>/`.
+### 1. Prepare a pasta da reunião
 
-### Fluxo recomendado (com interlocutores)
+Cada gravação ganha sua própria pasta em `input/`, com a mídia e um `meeting.toml` opcional:
 
-```bash
-# 1. Transcreve e faz a diarização inicial
-python transcribe_diarized.py "input/reuniao.mp4"
-
-# 2. Refina a diarização (informe o número de participantes, se souber)
-python refine_diarization.py "input/reuniao.mp4" "output/reuniao/reuniao.diarized.json" --speakers 4
+```
+input/
+└── reuniao-planejamento/
+    ├── reuniao-planejamento.mp4
+    ├── meeting.toml        ← idioma, prompt, nº de participantes, anotações
+    └── pauta.md            ← qualquer outro material de apoio (ignorado pelos scripts)
 ```
 
-Resultado em `output/reuniao/`:
+Copie [`meeting.example.toml`](meeting.example.toml) para a pasta e preencha o que souber:
 
-- `reuniao.diarized.txt` — texto legível, com horário e interlocutor
-- `reuniao.diarized.srt` — legenda
-- `reuniao.diarized.json` — enunciados, turnos e segmentos de diarização
+```toml
+language = "pt"        # sem este campo, o idioma é detectado automaticamente
+speakers = 3           # sem este campo, é estimado automaticamente
+prompt = """
+Reunião de planejamento do projeto X com Ana, Bruno e Carla. Termos: Odoo, ERP, sprint.
+"""
+notes = """
+Anotações livres (não usadas pelos scripts).
+"""
+```
 
-Opções do `transcribe_diarized.py`: `--model`, `--threads`, `--min-speakers`, `--max-speakers`, `--output-dir`.
+O `prompt` é o principal ajuste de qualidade: nomes próprios, siglas e termos técnicos ali escritos tendem a sair grafados corretamente na transcrição. Argumentos de linha de comando têm prioridade sobre o `meeting.toml`.
 
-> O idioma está fixo em inglês e há um `initial_prompt` com vocabulário de domínio em `transcribe_diarized.py`. Ajuste ambos para o seu caso.
+### 2. Transcreva (fluxo recomendado, com interlocutores)
+
+```bash
+# Transcreve e faz a diarização inicial
+python transcribe_diarized.py "input/reuniao-planejamento"
+
+# Refina a diarização (encontra a transcrição automaticamente)
+python refine_diarization.py "input/reuniao-planejamento"
+```
+
+Resultado em `output/reuniao-planejamento/` (o nome da subpasta é o nome do arquivo de mídia, sem extensão):
+
+- `reuniao-planejamento.diarized.txt` — texto legível, com horário e interlocutor
+- `reuniao-planejamento.diarized.srt` — legenda
+- `reuniao-planejamento.diarized.json` — enunciados, turnos e segmentos de diarização
+
+Opções do `transcribe_diarized.py`: `--model`, `--language`, `--prompt`, `--threads`, `--min-speakers`, `--max-speakers`, `--output-dir`.
+Opções do `refine_diarization.py`: `--speakers`, `--transcript`, `--output-dir`.
+
+> **Dica:** se só interessa uma voz principal (ex.: o professor numa aula), use `speakers = 2` para separar apenas "voz principal" e "demais".
 
 ### Transcrição simples
 
 ```bash
-python transcribe.py "input/reuniao.mp4" --model small.en --language en
+python transcribe.py "input/reuniao-planejamento"
 ```
 
-Gera `reuniao.txt`, `reuniao.srt` e `reuniao.json` em `output/reuniao/`. Use `--prompt` para passar nomes próprios ou termos técnicos e `--model medium` / `--language pt` para outros idiomas.
+Gera `.txt`, `.srt` e `.json` (sem interlocutores) na mesma pasta de saída. Mais rápido; usa `small.en` para inglês e `small` para outros idiomas, a menos que `--model` seja informado.
 
 ## Privacidade
 

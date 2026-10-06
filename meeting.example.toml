@@ -1,0 +1,25 @@
+# Copie para input/<nome-da-reuniao>/meeting.toml e preencha o que souber.
+# Todos os campos são opcionais; argumentos de linha de comando têm prioridade.
+
+# Idioma falado (en, pt, es...). Sem este campo, o idioma é detectado automaticamente.
+language = "pt"
+
+# Número de participantes. Sem este campo, é estimado automaticamente.
+speakers = 3
+
+# Alternativa a "speakers": faixa usada pela diarização inicial (transcribe_diarized.py).
+# min_speakers = 2
+# max_speakers = 5
+
+# Modelo Whisper (padrão: large-v3-turbo no transcribe_diarized.py).
+# model = "large-v3-turbo"
+
+# Contexto, nomes próprios e termos técnicos para orientar a transcrição.
+prompt = """
+Reunião de planejamento sobre o projeto X com Ana, Bruno e Carla. \
+Termos: Odoo, ERP, sprint, backlog.
+"""
+
+# Anotações livres sobre a reunião (não usadas pelos scripts).
+notes = """
+"""

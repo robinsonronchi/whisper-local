@@ -11,6 +11,8 @@ from resemblyzer import VoiceEncoder
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 
+from meeting import load_meeting
+
 
 SAMPLE_RATE = 16_000
 
@@ -27,12 +29,14 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Transcricao inglesa de alta fidelidade com diarizacao local."
     )
-    parser.add_argument("input", type=Path)
+    parser.add_argument("input", type=Path, help="Pasta da reuniao (input/<nome>/) ou arquivo de midia.")
     parser.add_argument("--output-dir", type=Path, default=Path("output"))
-    parser.add_argument("--model", default="large-v3-turbo")
+    parser.add_argument("--model", default=None, help="Padrao: large-v3-turbo.")
+    parser.add_argument("--language", default=None, help="Ex.: en, pt. Padrao: deteccao automatica.")
+    parser.add_argument("--prompt", default=None, help="Contexto, nomes proprios e termos tecnicos.")
     parser.add_argument("--threads", type=int, default=10)
-    parser.add_argument("--min-speakers", type=int, default=3)
-    parser.add_argument("--max-speakers", type=int, default=6)
+    parser.add_argument("--min-speakers", type=int, default=None, help="Padrao: 3.")
+    parser.add_argument("--max-speakers", type=int, default=None, help="Padrao: 6.")
     return parser.parse_args()
 
 
@@ -108,20 +112,26 @@ def merge_turns(utterances: list[dict]) -> list[dict]:
 
 def main() -> None:
     args = arguments()
-    source = args.input.expanduser().resolve()
-    if not source.is_file():
-        raise SystemExit(f"Arquivo nao encontrado: {source}")
-    destination = args.output_dir.expanduser().resolve() / source.stem
+    meeting = load_meeting(args.input)
+    source = meeting.media
+    destination = meeting.output_dir(args.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
 
-    print(f"Transcrevendo {source.name} com {args.model} (CPU/int8)...", flush=True)
+    model_name = meeting.option(args.model, "model", "large-v3-turbo")
+    language = meeting.option(args.language, "language")
+    prompt = meeting.option(args.prompt, "prompt")
+    speakers = meeting.config.get("speakers")
+    min_speakers = meeting.option(args.min_speakers, "min_speakers", speakers or 3)
+    max_speakers = meeting.option(args.max_speakers, "max_speakers", speakers or 6)
+
+    print(f"Transcrevendo {source.name} com {model_name} (CPU/int8)...", flush=True)
     model = WhisperModel(
-        args.model, device="cpu", compute_type="int8", cpu_threads=args.threads
+        model_name, device="cpu", compute_type="int8", cpu_threads=args.threads
     )
     pipeline = BatchedInferencePipeline(model=model)
     segments_iterator, info = pipeline.transcribe(
         str(source),
-        language="en",
+        language=language,
         batch_size=8,
         beam_size=5,
         best_of=5,
@@ -129,11 +139,7 @@ def main() -> None:
         vad_filter=True,
         vad_parameters={"min_silence_duration_ms": 350},
         word_timestamps=True,
-        initial_prompt=(
-            "English business meeting about Odoo hospital management, eMAR, POS, "
-            "pharmacy, wards, inpatient admission, consultation, prescriptions, "
-            "invoices, AI copilot, implementation, customization and licensing."
-        ),
+        initial_prompt=prompt,
     )
     segments = list(segments_iterator)
     utterances = make_utterances(segments)
@@ -156,13 +162,13 @@ def main() -> None:
         [voice_embedding(encoder, audio, item["start"], item["end"]) for item in utterances]
     )
     labels, speaker_count, silhouette = cluster_speakers(
-        embeddings, args.min_speakers, args.max_speakers
+        embeddings, min_speakers, max_speakers
     )
     for utterance, label in zip(utterances, labels):
         utterance["speaker"] = f"SPEAKER_{label + 1:02d}"
     turns = merge_turns(utterances)
 
-    stem = source.stem
+    stem = meeting.name
     txt_path = destination / f"{stem}.diarized.txt"
     srt_path = destination / f"{stem}.diarized.srt"
     json_path = destination / f"{stem}.diarized.json"
@@ -181,7 +187,7 @@ def main() -> None:
             )
     result = {
         "source": str(source),
-        "model": args.model,
+        "model": model_name,
         "language": info.language,
         "language_probability": info.language_probability,
         "duration_seconds": info.duration,
