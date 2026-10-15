@@ -1,4 +1,4 @@
-# whisper-local
+# transcricao
 
 Transcrição local de reuniões (áudio ou vídeo) com identificação de interlocutores, rodando 100% na CPU — nenhum arquivo sai da sua máquina.
 
@@ -32,8 +32,8 @@ Os interlocutores são agrupamentos acústicos (`SPEAKER_01`, `SPEAKER_02`, …)
 ## Instalação
 
 ```bash
-git clone https://github.com/robinsonronchi/whisper-local.git
-cd whisper-local
+git clone https://github.com/robinsonronchi/transcricao.git
+cd transcricao
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
