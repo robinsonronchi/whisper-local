@@ -85,7 +85,8 @@ def voice_embedding(encoder: VoiceEncoder, audio: np.ndarray, start: float, end:
 
 def cluster_speakers(embeddings: np.ndarray, minimum: int, maximum: int):
     maximum = min(maximum, len(embeddings) - 1)
-    minimum = min(minimum, maximum)
+    # silhouette exige ao menos 2 grupos; com maximum < 2 cai no caso de interlocutor unico
+    minimum = max(2, min(minimum, maximum))
     best = None
     for count in range(minimum, maximum + 1):
         labels = AgglomerativeClustering(
